@@ -10,7 +10,9 @@
 //    |  --------- open tray (measuring spoons) ----- |
 //    +-----------------------------------------------+ +X (right)
 //
-// The 0.5-cell extension sits on the BACK side (no foot under it).
+// Feet sit under the BACK two rows (tablespoon side). A row of
+// half-feet sits under the FRONT 0.5-cell so the bin prints with
+// support across the whole underside.
 // Edit the spoon dimensions below after measuring with your caliper.
 // =====================================================================
 
@@ -36,8 +38,8 @@ TSP_HANDLE_W_TP   = 19;
 TSP_HANDLE_THK    = 2.5;
 
 // --- PICKUP POCKET (deeper recess under each handle tip for fingers) ---
-PICKUP_LEN        = 28;    // length along the handle (from tip back toward bowl)
-PICKUP_WIDTH      = 22;    // width across the handle
+// Width is auto-matched to the handle slot at each end (no overhang to print).
+PICKUP_LEN        = 40;    // length along the handle (from tip back toward bowl)
 PICKUP_EXTRA_D    = 6;     // extra depth below the handle floor
 
 // --- TRAY (open bin for misc measuring spoons, front band) ---
@@ -66,7 +68,9 @@ $fn               = 80;
 // ====================== GRIDFINITY CONSTANTS =========================
 PITCH       = 42;
 CELLS_X     = 3;
-CELLS_Y     = 2.5;          // half-cell is on the BACK (high-Y) side
+CELLS_Y     = 2.5;
+HALF_AT_FRONT = true;       // true: 0.5-cell extension at FRONT (feet under back rows)
+                            // false: extension at BACK (feet under front rows)
 OUTER_X     = CELLS_X * PITCH - 0.5;    // 125.5
 OUTER_Y     = CELLS_Y * PITCH - 0.5;    // 104.5
 CORNER_R    = 4;
@@ -110,11 +114,13 @@ module rounded_box(w, d, h, r) {
 
 // ====================== FEET =========================================
 // Standard Gridfinity foot profile, placed at every FULL cell.
-// 3 across by 2 deep (front rows). No foot on the back 0.5 cell.
+// 3 across by 2 deep. The 0.5-cell extension has no foot under it.
 module feet() {
+    y_offset = HALF_AT_FRONT ? (CELLS_Y - 2) * PITCH : 0;
     for (ix = [0 : CELLS_X - 1])
         for (iy = [0 : 1])
-            translate([ix*PITCH + PITCH/2, iy*PITCH + PITCH/2, 0])
+            translate([ix*PITCH + PITCH/2,
+                       y_offset + iy*PITCH + PITCH/2, 0])
                 single_foot();
 }
 
@@ -192,11 +198,15 @@ module spoon_cavity(bowl_l, bowl_w, bowl_d, hl, h_wn, h_wt, h_t) {
     h_start = bowl_l/2 - overlap;
     h_end   = bowl_l/2 + hl;
 
-    // Bowl pocket (ellipse, centered at origin)
-    translate([0, 0, -bowl_d])
-        linear_extrude(height = bowl_d + eps)
-            scale([1, bowl_w / bowl_l, 1])
-                circle(r = bowl_l/2 + c);
+    // Bowl pocket — sphere section sized so the opening at z=0 is
+    // bowl_l x bowl_w (+ clearance) and the deepest point is bowl_d below.
+    // Radius derived from chord-and-sagitta:  R = (a^2 + d^2) / (2*d)
+    r_open    = bowl_l/2 + c;
+    sphere_r  = (r_open*r_open + bowl_d*bowl_d) / (2*bowl_d);
+    sphere_zc = sphere_r - bowl_d;       // center sits above z=0 by this much
+    translate([0, 0, sphere_zc])
+        scale([1, bowl_w / bowl_l, 1])
+            sphere(r = sphere_r);
 
     // Handle slot (tapered trapezoid), starts at neck (overlaps bowl slightly)
     translate([0, 0, -h_t])
@@ -208,11 +218,19 @@ module spoon_cavity(bowl_l, bowl_w, bowl_d, hl, h_wn, h_wt, h_t) {
                 [h_start,  (h_wn/2 + c)]
             ]);
 
-    // Pickup pocket (deeper recess under the last bit of handle, near tip)
-    translate([h_end - PICKUP_LEN/2, 0,
-               -(h_t + PICKUP_EXTRA_D)])
+    // Pickup pocket (deeper recess under the last bit of handle, near tip).
+    // Width matches the tapered handle slot at each end so the pocket is a
+    // clean downward extension of the slot -- no overhang to print.
+    total_h_len = h_end - h_start;
+    pp_start    = h_end - PICKUP_LEN;
+    w_pp_start  = h_wn + (h_wt - h_wn) * (pp_start - h_start) / total_h_len;
+    w_pp_end    = h_wt;
+    translate([0, 0, -(h_t + PICKUP_EXTRA_D)])
         linear_extrude(height = PICKUP_EXTRA_D + eps)
-            offset(r = 3)
-                square([max(PICKUP_LEN  - 6, 1),
-                        max(PICKUP_WIDTH - 6, 1)], center = true);
+            polygon([
+                [pp_start, -(w_pp_start/2 + c)],
+                [h_end,    -(w_pp_end/2   + c)],
+                [h_end,     (w_pp_end/2   + c)],
+                [pp_start,  (w_pp_start/2 + c)]
+            ]);
 }
