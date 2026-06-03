@@ -18,21 +18,21 @@
 // ====================== EDIT ME (all values in mm) ===================
 
 // --- TABLESPOON ---
-TBSP_BOWL_LEN     = 28;    // bowl long axis (bowl tip to where the neck meets the handle)
-TBSP_BOWL_WID     = 28;    // bowl widest dimension across
-TBSP_BOWL_DEPTH   = 15;    // how deep the bowl sits (cavity depth at the bowl)
-TBSP_HANDLE_LEN   = 87;    // handle length from neck to tip
-TBSP_HANDLE_W_NK  = 13;    // handle width at the neck (near bowl)
-TBSP_HANDLE_W_TP  = 19;    // handle width at the tip
-TBSP_HANDLE_THK   = 2.5;     // handle thickness (cavity depth in the handle slot)
+TBSP_BOWL_LEN     = 40;   // bowl long axis (bowl tip to where the neck meets the handle)
+TBSP_BOWL_WID     = 40;   // bowl widest dimension across
+TBSP_BOWL_DEPTH   = 19;   // how deep the bowl sits (cavity depth at the bowl)
+TBSP_HANDLE_LEN   = 85;   // handle length from neck to tip
+TBSP_HANDLE_W_NK  = 13;   // handle width at the neck (near bowl)
+TBSP_HANDLE_W_TP  = 19;   // handle width at the tip
+TBSP_HANDLE_THK   = 2.5;   // handle thickness (cavity depth in the handle slot)
 
 // --- TEASPOON ---
-TSP_BOWL_LEN      = 40;
-TSP_BOWL_WID      = 40;
-TSP_BOWL_DEPTH    = 19;
-TSP_HANDLE_LEN    = 85;
-TSP_HANDLE_W_NK   = 13;
-TSP_HANDLE_W_TP   = 19;
+TSP_BOWL_LEN      = 28; 
+TSP_BOWL_WID      = 28; 
+TSP_BOWL_DEPTH    = 15; 
+TSP_HANDLE_LEN    = 87; 
+TSP_HANDLE_W_NK   = 13; 
+TSP_HANDLE_W_TP   = 19; 
 TSP_HANDLE_THK    = 2.5;
 
 // --- PICKUP POCKET (deeper recess under each handle tip for fingers) ---
@@ -48,6 +48,17 @@ TRAY_INSIDE_DEPTH = 22;    // how deep the open tray pocket is
 SPOON_CLEAR       = 0.6;   // clearance added around every spoon dimension
 WALL              = 1.6;
 FLOOR             = 1.6;
+
+// --- FINE TUNING (nudge spoons into place after previewing) ---
+// Rotation pivots around each spoon's BOWL CENTER.
+// X+ = right, Y+ = back, rotate in degrees (CCW viewed from above).
+TBSP_X_SHIFT      = 0;     // tablespoon left(-) / right(+)
+TBSP_Y_SHIFT      = -4;     // tablespoon front(-) / back(+)
+TBSP_ROTATE       = 0;     // tablespoon rotation (degrees)
+
+TSP_X_SHIFT       = 0;
+TSP_Y_SHIFT       = -4;
+TSP_ROTATE        = 2;     // applied IN ADDITION to the 180-degree flip
 
 $fn               = 80;
 
@@ -154,45 +165,51 @@ module cavities() {
                        center = true);
 
     // ---- Tablespoon (bowl LEFT, handle RIGHT) ----
-    translate([WALL + SPOON_CLEAR, y_tbsp_c, z_top])
-        spoon_cavity(TBSP_BOWL_LEN, TBSP_BOWL_WID, TBSP_BOWL_DEPTH,
-                     TBSP_HANDLE_LEN, TBSP_HANDLE_W_NK,
-                     TBSP_HANDLE_W_TP, TBSP_HANDLE_THK);
+    // bowl center sits against the left wall
+    x_tbsp = WALL + SPOON_CLEAR + TBSP_BOWL_LEN/2;
+    translate([x_tbsp + TBSP_X_SHIFT, y_tbsp_c + TBSP_Y_SHIFT, z_top])
+        rotate([0, 0, TBSP_ROTATE])
+            spoon_cavity(TBSP_BOWL_LEN, TBSP_BOWL_WID, TBSP_BOWL_DEPTH,
+                         TBSP_HANDLE_LEN, TBSP_HANDLE_W_NK,
+                         TBSP_HANDLE_W_TP, TBSP_HANDLE_THK);
 
-    // ---- Teaspoon (bowl RIGHT, handle LEFT) -- rotate 180 around Z ----
-    translate([OUTER_X - WALL - SPOON_CLEAR, y_tsp_c, z_top])
-        rotate([0, 0, 180])
+    // ---- Teaspoon (bowl RIGHT, handle LEFT) -- rotate 180 + tune ----
+    x_tsp = OUTER_X - WALL - SPOON_CLEAR - TSP_BOWL_LEN/2;
+    translate([x_tsp + TSP_X_SHIFT, y_tsp_c + TSP_Y_SHIFT, z_top])
+        rotate([0, 0, 180 + TSP_ROTATE])
             spoon_cavity(TSP_BOWL_LEN, TSP_BOWL_WID, TSP_BOWL_DEPTH,
                          TSP_HANDLE_LEN, TSP_HANDLE_W_NK,
                          TSP_HANDLE_W_TP, TSP_HANDLE_THK);
 }
 
 
-// Spoon cavity anchored at BOWL TIP, handle extends in +X.
+// Spoon cavity anchored at BOWL CENTER, handle extends in +X.
 // Top of cavity is at z = 0, cavity descends into -Z.
 module spoon_cavity(bowl_l, bowl_w, bowl_d, hl, h_wn, h_wt, h_t) {
     c   = SPOON_CLEAR;
     eps = 0.1;
+    overlap = 1;
+    h_start = bowl_l/2 - overlap;
+    h_end   = bowl_l/2 + hl;
 
-    // Bowl pocket (ellipse, centered at x = bowl_l/2)
-    translate([bowl_l/2, 0, -bowl_d])
+    // Bowl pocket (ellipse, centered at origin)
+    translate([0, 0, -bowl_d])
         linear_extrude(height = bowl_d + eps)
             scale([1, bowl_w / bowl_l, 1])
                 circle(r = bowl_l/2 + c);
 
     // Handle slot (tapered trapezoid), starts at neck (overlaps bowl slightly)
-    overlap = 1;
     translate([0, 0, -h_t])
         linear_extrude(height = h_t + eps)
             polygon([
-                [bowl_l - overlap, -(h_wn/2 + c)],
-                [bowl_l + hl,      -(h_wt/2 + c)],
-                [bowl_l + hl,       (h_wt/2 + c)],
-                [bowl_l - overlap,  (h_wn/2 + c)]
+                [h_start, -(h_wn/2 + c)],
+                [h_end,   -(h_wt/2 + c)],
+                [h_end,    (h_wt/2 + c)],
+                [h_start,  (h_wn/2 + c)]
             ]);
 
     // Pickup pocket (deeper recess under the last bit of handle, near tip)
-    translate([bowl_l + hl - PICKUP_LEN/2, 0,
+    translate([h_end - PICKUP_LEN/2, 0,
                -(h_t + PICKUP_EXTRA_D)])
         linear_extrude(height = PICKUP_EXTRA_D + eps)
             offset(r = 3)
