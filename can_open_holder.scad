@@ -1,60 +1,38 @@
 // =====================================================================
 // Can Opener Holder  (2 x 5 cells = 84 x 209.5 mm)
 //
-// Holds a single-piece can opener laid flat: wing-knob end at the back
-// (high Y), long ergonomic handle running toward the front (low Y).
-//
-// Layout (top-down, looking +Z down at the bin):
-//
-//                     +Y (back)
-//   +X (right)
-//
-//   +-------------+  Y=OUTER_Y
-//   |   _______   |
-//   |  /       \  |  <- WING KNOB (wide, at the back)
-//   |  |       |  |
-//   |   \-----/   |
-//   |     |  |    |
-//   |     |  |    |
-//   |     |  |    |  <- HANDLE (narrow, running toward front)
-//   |     |  |    |
-//   |     |  |    |
-//   |     |__|    |
-//   |             |
-//   +-------------+  Y=0
-//      X=0    X=OUTER_X
+// Starting from scratch: just a Gridfinity 2x5 bin body with feet.
+// Cutouts get added one at a time below.
 // =====================================================================
 
 
-// ====================== EDIT ME (mm) =================================
-// Replace placeholder values with your measurements.
-
-// --- WING KNOB (the wide butterfly/wing piece at the top) ---
-WING_WID            = 74;    // X dimension (across the bin)
-WING_LEN            = 28;    // Y dimension (along the bin)
-WING_THK            = 43;    // Z thickness (cavity depth at the knob)
-
-// --- HANDLE (the long ergonomic body below the knob) ---
-HANDLE_WID          = 32;    // X dimension
-HANDLE_LEN          = 175;   // Y dimension
-HANDLE_THK          = 17;    // Z thickness
-
-// --- FIT / BUILD ---
-CAVITY_CLEAR        = 0.6;
+// ====================== EDIT ME ======================================
+BODY_H              = 25;    // height of the bin body above the feet
 WALL                = 1.6;
 FLOOR               = 1.6;
-
-// --- FINE TUNING ---
-OPENER_X_SHIFT      = 0;     // shift cavity in X
-OPENER_Y_SHIFT      = 0;     // shift cavity in Y
-OPENER_ROTATE       = 0;     // degrees (CCW from above)
-
-// Override the cavity depth. Default 0 = auto (= max of WING_THK and
-// HANDLE_THK, a snug fit but a tall bin). Set a smaller value to make
-// the pocket shallower so the wing knob sticks up proud of the bin.
-CAVITY_DEPTH_OVERRIDE = 20;
-
 $fn                 = 64;
+
+// --- HANDLE (rectangular cutout in the middle of the bin) ---
+HANDLE_WID          = 35;    // X dimension
+HANDLE_LEN          = 180;   // Y dimension
+HANDLE_THK          = 17;    // cavity depth (Z)
+HANDLE_RADIUS       = 4;     // corner radius
+
+// --- RING (circular cutout in the top-right of the bin) ---
+RING_DIA            = 40;    // diameter
+RING_THK            = 17;    // cavity depth (Z)
+RING_X_FROM_RIGHT   = 25;    // distance from the right wall to ring center
+RING_Y_FROM_BACK    = 50;    // distance from the back wall to ring center
+
+// --- BUTTERFLY HANDLE (rectangular cutout, rounded corners) ---
+BUTTERFLY_WID       = 29;    // X dimension
+BUTTERFLY_LEN       = 85;    // Y dimension
+BUTTERFLY_THK       = 17;    // cavity depth (Z)
+BUTTERFLY_RADIUS    = 9;     // corner radius
+BUTTERFLY_X_CENTER  = 20;    // X position of cavity center
+BUTTERFLY_Y_CENTER  = 160;   // Y position of cavity center
+
+CAVITY_CLEAR        = 0.6;
 
 
 // ====================== GRIDFINITY CONSTANTS =========================
@@ -70,11 +48,6 @@ FOOT_H2     = 1.8;
 FOOT_H3     = 2.15;
 FOOT_H      = FOOT_H1 + FOOT_H2 + FOOT_H3;
 
-CAVITY_DEPTH = (CAVITY_DEPTH_OVERRIDE > 0)
-             ? CAVITY_DEPTH_OVERRIDE
-             : max(WING_THK, HANDLE_THK);
-BODY_H = CAVITY_DEPTH + FLOOR;
-
 
 // ====================== MAIN =========================================
 difference() {
@@ -82,7 +55,43 @@ difference() {
         feet();
         bin_body();
     }
-    cavities();
+    handle_cutout();
+    ring_cutout();
+    butterfly_cutout();
+}
+
+
+// ====================== CUTOUTS ======================================
+// Centered rectangular cutout for the handle.
+module handle_cutout() {
+    z_top = FOOT_H + BODY_H;
+    translate([OUTER_X/2, OUTER_Y/2, z_top - HANDLE_THK])
+        linear_extrude(height = HANDLE_THK + 0.1)
+            offset(r = HANDLE_RADIUS)
+                square([HANDLE_WID + 2*CAVITY_CLEAR - 2*HANDLE_RADIUS,
+                        HANDLE_LEN + 2*CAVITY_CLEAR - 2*HANDLE_RADIUS],
+                       center = true);
+}
+
+// Circular cutout for the ring, in the top-right (high X, high Y).
+module ring_cutout() {
+    z_top = FOOT_H + BODY_H;
+    translate([OUTER_X - RING_X_FROM_RIGHT,
+               OUTER_Y - RING_Y_FROM_BACK,
+               z_top - RING_THK])
+        linear_extrude(height = RING_THK + 0.1)
+            circle(d = RING_DIA + 2*CAVITY_CLEAR);
+}
+
+// Rounded-rectangle cutout for the butterfly handle.
+module butterfly_cutout() {
+    z_top = FOOT_H + BODY_H;
+    translate([BUTTERFLY_X_CENTER, BUTTERFLY_Y_CENTER, z_top - BUTTERFLY_THK])
+        linear_extrude(height = BUTTERFLY_THK + 0.1)
+            offset(r = BUTTERFLY_RADIUS)
+                square([BUTTERFLY_WID + 2*CAVITY_CLEAR - 2*BUTTERFLY_RADIUS,
+                        BUTTERFLY_LEN + 2*CAVITY_CLEAR - 2*BUTTERFLY_RADIUS],
+                       center = true);
 }
 
 
@@ -100,7 +109,7 @@ module rounded_box(w, d, h, r) {
 
 
 // ====================== FEET =========================================
-// 2 across by 5 deep = 10 standard feet
+// 2 across by 5 deep = 10 standard Gridfinity feet
 module feet() {
     for (ix = [0 : CELLS_X - 1])
         for (iy = [0 : CELLS_Y - 1])
@@ -127,46 +136,4 @@ module rect_foot(top_x, top_y) {
     translate([0, 0, FOOT_H1 + FOOT_H2])
         linear_extrude(height = FOOT_H3, scale = [top_x/mid_x, top_y/mid_y])
             offset(r = mid_r) square([mid_x - 2*mid_r, mid_y - 2*mid_r], center = true);
-}
-
-
-// ====================== CAVITIES =====================================
-// Single tapered cavity for the opener body (hull of wing-knob rectangle
-// + handle rectangle).
-module cavities() {
-    z_top        = FOOT_H + BODY_H;
-    cavity_depth = CAVITY_DEPTH;
-
-    // Y positions: handle at the front, wing knob behind it
-    handle_y_start = WALL;
-    handle_y_end   = handle_y_start + HANDLE_LEN;
-    wing_y_center  = handle_y_end + WING_LEN/2;
-    wing_y_end     = handle_y_end + WING_LEN;
-
-    // X positions: both centered along the bin
-    x_center = OUTER_X / 2 + OPENER_X_SHIFT;
-
-    // Rotation pivot: where the handle meets the wing knob
-    pivot_y = handle_y_end;
-
-    // ---- Main cavity (hull of handle + wing knob) ----
-    translate([0, OPENER_Y_SHIFT, z_top - cavity_depth])
-        translate([x_center, pivot_y, 0])
-            rotate([0, 0, OPENER_ROTATE])
-                translate([-x_center, -pivot_y, 0])
-                    linear_extrude(height = cavity_depth + 0.1)
-                        hull() {
-                            // Handle: long narrow rectangle
-                            translate([x_center, (handle_y_start + handle_y_end)/2])
-                                offset(r = 2)
-                                    square([HANDLE_WID + 2*CAVITY_CLEAR - 4,
-                                            HANDLE_LEN - 4],
-                                           center = true);
-                            // Wing knob: wide rectangle
-                            translate([x_center, wing_y_center])
-                                offset(r = 2)
-                                    square([WING_WID + 2*CAVITY_CLEAR - 4,
-                                            WING_LEN + 2*CAVITY_CLEAR - 4],
-                                           center = true);
-                        }
 }
