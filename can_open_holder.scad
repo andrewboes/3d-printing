@@ -7,7 +7,7 @@
 
 
 // ====================== EDIT ME ======================================
-BODY_H              = 25;    // height of the bin body above the feet
+BODY_H              = 23;    // height of the bin body above the feet
 WALL                = 1.6;
 FLOOR               = 1.6;
 $fn                 = 64;
@@ -17,20 +17,22 @@ HANDLE_WID          = 35;    // X dimension
 HANDLE_LEN          = 180;   // Y dimension
 HANDLE_THK          = 17;    // cavity depth (Z)
 HANDLE_RADIUS       = 4;     // corner radius
+HANDLE_X_CENTER     = 44;    // X position of cavity center
+HANDLE_Y_CENTER     = 100;   // Y position of cavity center
 
 // --- RING (circular cutout in the top-right of the bin) ---
 RING_DIA            = 40;    // diameter
 RING_THK            = 17;    // cavity depth (Z)
-RING_X_FROM_RIGHT   = 25;    // distance from the right wall to ring center
-RING_Y_FROM_BACK    = 50;    // distance from the back wall to ring center
+RING_X_FROM_RIGHT   = 23;    // distance from the right wall to ring center
+RING_Y_FROM_BACK    = 45;    // distance from the back wall to ring center
 
 // --- BUTTERFLY HANDLE (rectangular cutout, rounded corners) ---
-BUTTERFLY_WID       = 29;    // X dimension
+BUTTERFLY_WID       = 33;    // X dimension
 BUTTERFLY_LEN       = 85;    // Y dimension
 BUTTERFLY_THK       = 17;    // cavity depth (Z)
 BUTTERFLY_RADIUS    = 9;     // corner radius
-BUTTERFLY_X_CENTER  = 20;    // X position of cavity center
-BUTTERFLY_Y_CENTER  = 160;   // Y position of cavity center
+BUTTERFLY_X_CENTER  = 19;    // X position of cavity center
+BUTTERFLY_Y_CENTER  = 165;   // Y position of cavity center
 
 CAVITY_CLEAR        = 0.6;
 
@@ -62,10 +64,10 @@ difference() {
 
 
 // ====================== CUTOUTS ======================================
-// Centered rectangular cutout for the handle.
+// Rectangular cutout for the handle (positioned via HANDLE_X/Y_CENTER).
 module handle_cutout() {
     z_top = FOOT_H + BODY_H;
-    translate([OUTER_X/2, OUTER_Y/2, z_top - HANDLE_THK])
+    translate([HANDLE_X_CENTER, HANDLE_Y_CENTER, z_top - HANDLE_THK])
         linear_extrude(height = HANDLE_THK + 0.1)
             offset(r = HANDLE_RADIUS)
                 square([HANDLE_WID + 2*CAVITY_CLEAR - 2*HANDLE_RADIUS,
