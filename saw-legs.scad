@@ -7,23 +7,25 @@
 floor_depth = 23.5;
 // Side-to-side, center of foot to center of foot, at the floor (MEASURED)
 floor_width = 20;
-// Front-to-back, at the top of the legs, OUTSIDE corner to OUTSIDE corner (GUESS)
-top_depth = 19;
-// Side-to-side, at the top of the legs, OUTSIDE corner to OUTSIDE corner (GUESS)
-top_width = 16;
-// Straight up from the floor to the top of the legs, not along the slant (GUESS)
-leg_height = 25;
+// Front-to-back, at the top of the legs, OUTSIDE corner to OUTSIDE corner (MEASURED)
+top_depth = 20.75;
+// Side-to-side, at the top of the legs, OUTSIDE corner to OUTSIDE corner (MEASURED)
+top_width = 17;
+// Straight up from the floor to the top of the legs, not along the slant (MEASURED)
+leg_height = 21.75;
 
 /* [Leg shape] */
-// Width of each side of the L-shaped leg (GUESS)
-leg_flange = 1.5;
+// The legs taper. Width of each side of the L at the TOP of the leg (MEASURED)
+leg_flange_top = 3.5;
+// Width of each side of the L at the BOTTOM of the leg (MEASURED)
+leg_flange_bottom = 1.75;
 // Metal thickness (GUESS, about 14 gauge)
 leg_thickness = 0.075;
 
 /* [Feet] */
 // true = flat pad at the bottom of each leg, false = bare leg end (GUESS)
 has_foot_pad = true;
-// Pad size, square. Must fit inside the L: no bigger than leg_flange - leg_thickness (GUESS)
+// Pad size, square. Must fit inside the L: no bigger than leg_flange_bottom - leg_thickness (GUESS)
 foot_pad_size = 1.375;
 // Pad thickness (GUESS)
 foot_pad_thickness = 0.25;
@@ -58,8 +60,8 @@ table_width = 27;
 table_depth = 27;
 // Table thickness (GUESS)
 table_thickness = 1.5;
-// Lowest point of the saw body between the legs, floor to bottom (GUESS)
-saw_body_bottom = 25;
+// Lowest point of the saw body, floor to bottom. 0 = sits right on top of the legs
+saw_body_bottom = 0;
 // Saw body (trunnion housing) size under the table (GUESS)
 saw_body_width = 18;
 saw_body_depth = 18;
@@ -84,6 +86,9 @@ $fn = 32;
 
 // ---------- Geometry helpers ----------
 
+// Saw body bottom: on top of the legs unless set by hand
+body_bottom = saw_body_bottom > 0 ? saw_body_bottom : leg_height;
+
 // Outside-corner spread at the floor (feet sit inside the L, so corners are farther out)
 corner_width = floor_width + 2 * foot_inset;
 corner_depth = floor_depth + 2 * foot_inset;
@@ -92,10 +97,19 @@ corner_depth = floor_depth + 2 * foot_inset;
 function width_at(z) = corner_width + (top_width - corner_width) * z / leg_height;
 function depth_at(z) = corner_depth + (top_depth - corner_depth) * z / leg_height;
 
-// L-shaped angle profile, corner at the origin, flanges along +X and +Y
-module angle_profile() {
-    square([leg_flange, leg_thickness]);
-    square([leg_thickness, leg_flange]);
+// Tapered L-shaped angle, corner at the origin, flanges along +X and +Y.
+// Each side tapers from leg_flange_bottom at the floor to leg_flange_top at the top.
+module tapered_angle(h) {
+    t = leg_thickness;
+    e = 0.001;
+    hull() {
+        cube([leg_flange_bottom, t, e]);
+        translate([0, 0, h - e]) cube([leg_flange_top, t, e]);
+    }
+    hull() {
+        cube([t, leg_flange_bottom, e]);
+        translate([0, 0, h - e]) cube([t, leg_flange_top, e]);
+    }
 }
 
 // One leg at corner (sx, sy), each +1 or -1. The L corner sits on the outside,
@@ -110,7 +124,7 @@ module leg(sx, sy) {
                     [0, 1, dy / leg_height, 0],
                     [0, 0, 1, 0]])
             scale([-sx, -sy, 1])
-                linear_extrude(leg_height) angle_profile();
+                tapered_angle(leg_height);
     if (has_foot_pad)
         translate(foot) foot_pad();
 }
@@ -147,8 +161,8 @@ module stand() {
 module saw() {
     // Saw body (trunnion housing) between stand and table
     color("SlateGray", 0.6)
-        translate([-saw_body_width / 2, -saw_body_depth / 2, saw_body_bottom])
-            cube([saw_body_width, saw_body_depth, table_height - table_thickness - saw_body_bottom]);
+        translate([-saw_body_width / 2, -saw_body_depth / 2, body_bottom])
+            cube([saw_body_width, saw_body_depth, table_height - table_thickness - body_bottom]);
     // Main cast-iron table
     color("Silver", 0.7)
         translate([-table_width / 2, -table_depth / 2, table_height - table_thickness])
