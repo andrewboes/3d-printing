@@ -50,6 +50,23 @@ brace_right = true;
 has_top_apron = true;
 apron_width = 2;
 
+/* [Wood band] */
+show_band = true;
+// Height of the middle of the 2x4s off the floor, at the existing square hole (MEASURED)
+band_center_height = 4.5;
+// Lumber thickness (2x4 actual size)
+lumber_thickness = 1.5;
+// Lumber width, standing on edge (2x4 actual size)
+lumber_width = 3.5;
+// Thinnest point of each shim, at the bottom of the band
+shim_min = 0.125;
+// Carriage bolt diameter
+bolt_dia = 0.375;
+// Distance from the leg's outside corner to the bolt hole, along the flange. 0 = centered on the flange (GUESS)
+bolt_offset = 0;
+// true = square holes on both sides of each leg, false = front/back sides only (GUESS)
+bolts_both_faces = true;
+
 /* [Saw body (context)] */
 show_saw = true;
 // Floor to the top of the cast-iron table (GUESS, typical is 34)
@@ -178,9 +195,116 @@ module saw() {
             rotate([0, 90, 0]) cylinder(d = motor_dia, h = motor_length, center = true);
 }
 
+// ---------- Wood band ----------
+
+band_z0 = band_center_height - lumber_width / 2;   // bottom of the 2x4s
+band_z1 = band_center_height + lumber_width / 2;   // top of the 2x4s
+
+// Width of each side of the L at height z
+function flange_at(z) = leg_flange_bottom + (leg_flange_top - leg_flange_bottom) * z / leg_height;
+
+// Inside faces of the band (distance from center). The legs lean in going up, so the
+// band touches the shim's thin end at the bottom and the shims thicken toward the top.
+band_in_x = width_at(band_z0) / 2 + shim_min;
+band_in_y = depth_at(band_z0) / 2 + shim_min;
+band_out_w = 2 * (band_in_x + lumber_thickness);
+band_out_d = 2 * (band_in_y + lumber_thickness);
+
+// Shim thickness at the top of the band
+shim_max_front = band_in_y - depth_at(band_z1) / 2;
+shim_max_side = band_in_x - width_at(band_z1) / 2;
+
+// Lean angle of the legs
+lean_front = atan((corner_depth - top_depth) / 2 / leg_height);
+lean_side = atan((corner_width - top_width) / 2 / leg_height);
+
+function bolt_pos() = bolt_offset > 0 ? bolt_offset : flange_at(band_center_height) / 2;
+
+// Front and back boards run the full outside width; side boards fit between them
+module band_boards() {
+    color("BurlyWood") {
+        for (sy = [-1, 1])
+            translate([-band_out_w / 2, sy > 0 ? band_in_y : -band_in_y - lumber_thickness, band_z0])
+                cube([band_out_w, lumber_thickness, lumber_width]);
+        for (sx = [-1, 1])
+            translate([sx > 0 ? band_in_x : -band_in_x - lumber_thickness, -band_in_y, band_z0])
+                cube([lumber_thickness, 2 * band_in_y, lumber_width]);
+    }
+}
+
+// Wedge shim between a leg's front/back face and the front/back board
+module shim_front(sx, sy) {
+    w = flange_at(band_center_height);
+    xc = sx * width_at(band_center_height) / 2;
+    e = 0.001;
+    color("Peru")
+        hull()
+            for (z = [band_z0, band_z1 - e]) {
+                t = band_in_y - depth_at(z) / 2;
+                translate([min(xc, xc - sx * w), sy > 0 ? depth_at(z) / 2 : -band_in_y, z])
+                    cube([w, t, e]);
+            }
+}
+
+// Wedge shim between a leg's side face and the side board
+module shim_side(sx, sy) {
+    w = flange_at(band_center_height);
+    yc = sy * depth_at(band_center_height) / 2;
+    e = 0.001;
+    color("Peru")
+        hull()
+            for (z = [band_z0, band_z1 - e]) {
+                t = band_in_x - width_at(z) / 2;
+                translate([sx > 0 ? width_at(z) / 2 : -band_in_x, min(yc, yc - sy * w), z])
+                    cube([t, w, e]);
+            }
+}
+
+// Carriage bolt: head inside the leg, nut outside the 2x4
+module carriage_bolt(len) {
+    color("Silver") {
+        cylinder(d = bolt_dia, h = len, $fn = 16);
+        translate([0, 0, -0.2]) cylinder(d = bolt_dia * 2.2, h = 0.2, $fn = 24);
+    }
+}
+
+module band_bolts() {
+    zc = band_center_height;
+    for (sx = [-1, 1], sy = [-1, 1]) {
+        // Through the front/back face of the leg
+        translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (depth_at(zc) / 2 - leg_thickness), zc])
+            rotate([sy > 0 ? -90 : 90, 0, 0])
+                carriage_bolt(band_in_y - depth_at(zc) / 2 + lumber_thickness + 0.6);
+        // Through the side face of the leg
+        if (bolts_both_faces)
+            translate([sx * (width_at(zc) / 2 - leg_thickness), sy * (depth_at(zc) / 2 - bolt_pos()), zc])
+                rotate([0, sx > 0 ? 90 : -90, 0])
+                    carriage_bolt(band_in_x - width_at(zc) / 2 + lumber_thickness + 0.6);
+    }
+}
+
+module wood_band() {
+    band_boards();
+    for (sx = [-1, 1], sy = [-1, 1]) {
+        shim_front(sx, sy);
+        shim_side(sx, sy);
+    }
+    band_bolts();
+}
+
+// Cut list, printed in the OpenSCAD console
+echo(str("BAND: front/back boards (2) = ", band_out_w, " in long"));
+echo(str("BAND: side boards (2) = ", 2 * band_in_y, " in long"));
+echo(str("BAND: outside size = ", band_out_w, " x ", band_out_d, " in"));
+echo(str("SHIMS front/back (4): ", shim_min, " in at bottom to ", shim_max_front, " in at top, ",
+         flange_at(band_center_height), " in wide, lean ", lean_front, " deg"));
+echo(str("SHIMS sides (4): ", shim_min, " in at bottom to ", shim_max_side, " in at top, ",
+         flange_at(band_center_height), " in wide, lean ", lean_side, " deg"));
+
 // ---------- Assembly ----------
 
 stand();
+if (show_band) wood_band();
 if (show_saw) saw();
 
 // Floor reference
