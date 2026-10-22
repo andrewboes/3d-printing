@@ -67,6 +67,51 @@ bolt_offset = 0;
 // true = square holes on both sides of each leg, false = front/back sides only (GUESS)
 bolts_both_faces = true;
 
+/* [Wheel arms] */
+show_arms = true;
+// Checked = arms on the outside of the band (wheels near the corners), unchecked = inside
+arms_outside = true;
+// Unchecked = parked (saw on its feet). Checked = rolling (pedals down, saw lifted)
+rolling = false;
+// Which arms to show (more coming later)
+show_front_arm = true;
+show_right_arm = true;
+// Which way the pinwheel turns, seen from above
+pinwheel_counterclockwise = true;
+// Longest the arms can be; each arm is shortened automatically to clear its neighbor
+arm_length = 20;
+// Arm cross-section (hardwood)
+arm_thickness = 1.5;
+arm_height = 3.5;
+// Pivot bolt distance from the corner end of the arm
+arm_pivot_from_end = 1.75;
+// Pivot bolt diameter
+pivot_bolt_dia = 0.375;
+// Wheel (caster) center distance from the pivot bolt
+caster_from_pivot = 3;
+// How far the wheels lift the saw
+lift_height = 0.5;
+// Wheel clearance off the floor when parked
+park_clearance = 0.25;
+// Pivot block: hardwood block glued and screwed to the band at each pivot, so the pivot
+// bolt has solid wood around it above the top of the band
+pivot_block_thickness = 0.75;
+pivot_block_length = 4;
+// Gap (washers) between pivot block and arm
+pivot_gap = 0.125;
+
+/* [Casters] */
+// Floor to top of mounting plate (MEASURED)
+caster_height = 4.675;
+// Mounting plate, along the arm (GUESS)
+caster_plate_length = 3.125;
+// Mounting plate, across the arm (GUESS)
+caster_plate_width = 2.625;
+// Wheel diameter (MEASURED)
+caster_wheel_dia = 3;
+// Wheel width (GUESS)
+caster_wheel_width = 1.25;
+
 /* [Saw body (context)] */
 show_saw = true;
 // Floor to the top of the cast-iron table (GUESS, typical is 34)
@@ -301,11 +346,149 @@ echo(str("SHIMS front/back (4): ", shim_min, " in at bottom to ", shim_max_front
 echo(str("SHIMS sides (4): ", shim_min, " in at bottom to ", shim_max_side, " in at top, ",
          flange_at(band_center_height), " in wide, lean ", lean_side, " deg"));
 
+// ---------- Wheel arms ----------
+// Pinwheel layout: one arm on the inside of each side of the band. Each arm's pivot
+// and wheel are near one corner; the pedal end points toward the next corner.
+
+lift = rolling ? lift_height : 0;
+
+// Arm angle when parked: pedal end up, wheel raised by lift + clearance
+park_angle = asin((lift_height + park_clearance) / caster_from_pivot);
+arm_angle = rolling ? 0 : park_angle;
+
+// Pivot height in the saw's frame (saw on its feet). When rolling the arm is level
+// and the caster plate sits at caster_height.
+pivot_z = caster_height + arm_height / 2 - lift_height;
+
+// Distance from the band's inside face to the arm's band-side face
+arm_standoff = pivot_block_thickness + pivot_gap;
+
+// Pivot block: its corner-side end sits 1/8 in past the leg flange; the pivot is 1 1/4 in
+// from that end and 1 1/4 in below the block's top
+block_pivot_edge = 1.25;
+block_top_z = pivot_z + block_pivot_edge;
+
+// Where the leg's flange ends along each side of the band, checked at the top of the
+// pivot block (the legs lean in and widen going up, so that's where they reach farthest)
+flange_end_x = width_at(block_top_z) / 2 - flange_at(block_top_z);   // along front/back boards
+flange_end_y = depth_at(block_top_z) / 2 - flange_at(block_top_z);   // along side boards
+
+// Inside: far end of each arm stops 1/4 in short of the next arm's inside face
+far_limit_front = band_in_x - arm_standoff - caster_plate_width - 0.25;
+far_limit_side = band_in_y - arm_standoff - caster_plate_width - 0.25;
+
+// Pivot position along each side (distance from the center of the saw), and arm lengths.
+// Inside: the pivot block has to start past the leg.
+// Outside: the pivot bolt goes through the band just past the leg, so its nut and washer
+// on the inside of the band clear the leg and are easy to reach.
+nut_clearance = 0.625;   // washer radius plus 1/8 in
+pivot_along_front = arms_outside ? flange_end_x - nut_clearance
+                                 : flange_end_x - 0.125 - block_pivot_edge;
+pivot_along_side = arms_outside ? flange_end_y - nut_clearance
+                                : flange_end_y - 0.125 - block_pivot_edge;
+arm_len_front = min(arm_length, pivot_along_front + arm_pivot_from_end
+                                + (arms_outside ? band_out_w / 2 - 0.25 : far_limit_front));
+arm_len_side = min(arm_length, pivot_along_side + arm_pivot_from_end
+                               + (arms_outside ? band_out_d / 2 - 0.25 : far_limit_side));
+
+// Band face the arms mount to (distance from the center of the saw)
+face_front = arms_outside ? band_out_d / 2 : band_in_y;
+face_side = arms_outside ? band_out_w / 2 : band_in_x;
+// +1 = arm sits toward the saw's center from the band, -1 = arm sits outside the band
+arm_dir = arms_outside ? -1 : 1;
+
+// One arm in its own frame: pivot at origin, arm points +X, band is toward -Y.
+// The caster pad is glued to the far face of the arm so the plate clears the pivot block.
+module arm_local(len) {
+    u0 = -arm_pivot_from_end;
+    // Pivot block (fixed to the band, does not swing)
+    color("SaddleBrown")
+        translate([-block_pivot_edge, -arm_standoff, band_z0 - pivot_z])
+            cube([pivot_block_length, pivot_block_thickness, block_top_z - band_z0]);
+    // Pivot bolt: head on the arm, runs through the block and the band,
+    // washer and nut on the other side of the band
+    back = -arm_standoff - lumber_thickness;   // far face of the band
+    color("Silver") {
+        translate([0, back - 0.45, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia, h = -back + 0.45 + arm_thickness, $fn = 16);
+        translate([0, arm_thickness, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia * 1.8, h = 0.25, $fn = 6);           // head
+        translate([0, back - 0.08, 0]) rotate([-90, 0, 0])
+            cylinder(d = 1, h = 0.08, $fn = 24);                             // washer
+        translate([0, back - 0.41, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia * 1.8, h = 0.33, $fn = 6);           // nut
+    }
+    // Swinging parts
+    rotate([0, -arm_angle, 0]) {
+        color("Tan")
+            translate([u0, 0, -arm_height / 2]) cube([len, arm_thickness, arm_height]);
+        // Caster pad
+        color("Tan")
+            translate([caster_from_pivot - caster_plate_length / 2 - 0.25, arm_thickness, -arm_height / 2])
+                cube([caster_plate_length + 0.5, caster_plate_width - arm_thickness, 1.5]);
+        translate([caster_from_pivot, caster_plate_width / 2, -arm_height / 2]) caster();
+    }
+}
+
+// Swivel caster hanging from its mounting plate (origin = top center of plate)
+module caster() {
+    h = caster_height;
+    r = caster_wheel_dia / 2;
+    color("Silver") {
+        translate([-caster_plate_length / 2, -caster_plate_width / 2, -0.12])
+            cube([caster_plate_length, caster_plate_width, 0.12]);
+        translate([0, 0, -0.5]) cylinder(d = 1.75, h = 0.38, $fn = 24);
+        // Fork
+        for (s = [-1, 1])
+            translate([-0.6, s * (caster_wheel_width / 2 + 0.06) - 0.05, -(h - r)])
+                cube([1.2, 0.1, h - r - 0.5]);
+    }
+    color("DimGray")
+        translate([0, 0, -(h - r)]) rotate([90, 0, 0])
+            cylinder(r = r, h = caster_wheel_width, center = true, $fn = 32);
+}
+
+// Place an arm on side k (0 = front, 1 = right, 2 = back, 3 = left)
+module place_arm(k) {
+    d = pinwheel_counterclockwise ? 1 : -1;
+    front_back = (k % 2 == 0);
+    face = front_back ? face_front : face_side;
+    along = front_back ? pivot_along_front : pivot_along_side;
+    len = front_back ? arm_len_front : arm_len_side;
+    // Sides: counterclockwise turns front -> right -> back -> left.
+    // Outside arms are mirrored so the band is on their inner side.
+    rotate([0, 0, d * k * 90])
+        translate([-d * along, -face + arm_dir * arm_standoff, pivot_z])
+            scale([d, arm_dir, 1]) arm_local(len);
+}
+
+module wheel_arms() {
+    if (show_front_arm) place_arm(0);
+    if (show_right_arm) place_arm(pinwheel_counterclockwise ? 1 : 3);
+}
+
+// Wheel positions (rolling), for stance check. Front wheel, then right/left side wheel.
+wf = [-pivot_along_front + caster_from_pivot, -face_front + arm_dir * (arm_standoff + caster_plate_width / 2)];
+ws0 = [-pivot_along_side + caster_from_pivot, -face_side + arm_dir * (arm_standoff + caster_plate_width / 2)];
+ws = [-ws0[1], ws0[0]];   // rotate 90 degrees onto the right side
+function edge_dist(a, b) = abs(a[0] * b[1] - b[0] * a[1]) / norm(b - a);
+stance = 2 * min(edge_dist(wf, ws), edge_dist(ws, -wf));
+pedal_rise = (arm_len_side - arm_pivot_from_end) * sin(park_angle);
+
+echo(str("ARMS: front/back arms = ", arm_len_front, " in long, side arms = ", arm_len_side, " in long"));
+echo(str("ARMS: parked angle = ", park_angle, " deg, pedal end rises ", pedal_rise, " in (side arm)"));
+echo(str("ARMS: pedal leverage front = ", (arm_len_front - arm_pivot_from_end) / caster_from_pivot,
+         ":1, side = ", (arm_len_side - arm_pivot_from_end) / caster_from_pivot, ":1"));
+echo(str("STANCE: narrowest width on wheels = ", stance, " in (on its feet: ", min(floor_width, floor_depth), " in)"));
+
 // ---------- Assembly ----------
 
-stand();
-if (show_band) wood_band();
-if (show_saw) saw();
+translate([0, 0, lift]) {
+    stand();
+    if (show_band) wood_band();
+    if (show_arms) wheel_arms();
+    if (show_saw) saw();
+}
 
 // Floor reference
 color("LightGray", 0.3) translate([-25, -20, -0.02]) cube([50, 40, 0.02]);
