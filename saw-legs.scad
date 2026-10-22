@@ -52,6 +52,10 @@ apron_width = 2;
 
 /* [Wood band] */
 show_band = true;
+// Front and back 2x4s (and their shims and bolts). Off for now; may be added at the end
+show_2x4 = false;
+// Lay out every wood part on the floor next to the saw, with labels
+show_parts_layout = true;
 // Height of the middle of the 2x4s off the floor, at the existing square hole (MEASURED)
 band_center_height = 4.5;
 // Lumber thickness (2x4 actual size)
@@ -100,6 +104,19 @@ park_clearance = 0.25;
 pivot_gap = 0.125;
 // Vertical gap between the lower and upper arm (when rolling)
 stack_gap = 0.25;
+
+// Push pad on the end of each lower arm: the upper arm presses on it to push the lower arm down
+push_pad_length = 1.5;
+
+/* [Colors] */
+// Color for each kind of material
+color_2x4 = "White";
+color_2x6 = "Gold";
+color_oak_arm = "Peru";
+color_riser = "DarkOrange";
+color_shim = "LimeGreen";
+color_push_pad = "Red";
+color_hardware = "Silver";
 
 /* [Casters] */
 // Floor to top of mounting plate (MEASURED)
@@ -270,27 +287,34 @@ function bolt_pos() = bolt_offset > 0 ? bolt_offset : flange_at(band_center_heig
 
 // Front and back boards run the full outside width; side boards fit between them
 module band_boards() {
+    // 2x4 front and back boards
+    if (show_2x4) color(color_2x4) difference() {
+        for (sy = [-1, 1])
+            translate([-band_out_w / 2, sy > 0 ? band_in_y : -band_in_y - lumber_thickness, band_z0])
+                cube([band_out_w, lumber_thickness, lumber_width]);
+        nut_counterbores();
+    }
+    // 2x6 side boards
+    color(color_2x6) difference() {
+        for (sx = [-1, 1])
+            translate([sx > 0 ? band_in_x : -band_in_x - lumber_thickness, -band_in_y, side_z0])
+                cube([lumber_thickness, 2 * band_in_y, side_lumber_width]);
+        nut_counterbores();
+    }
+}
+
+// Nut counterbores on the outside face of the band
+module nut_counterbores() {
     zc = band_center_height;
     r = band_nut_recess_depth;
-    color("BurlyWood") difference() {
-        union() {
-            for (sy = [-1, 1])
-                translate([-band_out_w / 2, sy > 0 ? band_in_y : -band_in_y - lumber_thickness, band_z0])
-                    cube([band_out_w, lumber_thickness, lumber_width]);
-            for (sx = [-1, 1])
-                translate([sx > 0 ? band_in_x : -band_in_x - lumber_thickness, -band_in_y, side_z0])
-                    cube([lumber_thickness, 2 * band_in_y, side_lumber_width]);
-        }
-        // Nut counterbores on the outside face
-        for (sx = [-1, 1], sy = [-1, 1]) {
-            translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (band_out_d / 2 + 0.01), zc])
-                rotate([sy > 0 ? 90 : -90, 0, 0])
+    for (sx = [-1, 1], sy = [-1, 1]) {
+        translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (band_out_d / 2 + 0.01), zc])
+            rotate([sy > 0 ? 90 : -90, 0, 0])
+                cylinder(d = band_nut_recess_dia, h = r + 0.01, $fn = 24);
+        if (bolts_both_faces)
+            translate([sx * (band_out_w / 2 + 0.01), sy * (depth_at(zc) / 2 - bolt_pos()), zc])
+                rotate([0, sx > 0 ? -90 : 90, 0])
                     cylinder(d = band_nut_recess_dia, h = r + 0.01, $fn = 24);
-            if (bolts_both_faces)
-                translate([sx * (band_out_w / 2 + 0.01), sy * (depth_at(zc) / 2 - bolt_pos()), zc])
-                    rotate([0, sx > 0 ? -90 : 90, 0])
-                        cylinder(d = band_nut_recess_dia, h = r + 0.01, $fn = 24);
-        }
     }
 }
 
@@ -299,7 +323,7 @@ module shim_front(sx, sy) {
     w = flange_at(band_center_height);
     xc = sx * width_at(band_center_height) / 2;
     e = 0.001;
-    color("Peru")
+    color(color_shim)
         hull()
             for (z = [band_z0, band_z1 - e]) {
                 t = band_in_y - depth_at(z) / 2;
@@ -313,7 +337,7 @@ module shim_side(sx, sy) {
     w = flange_at(band_center_height);
     yc = sy * depth_at(band_center_height) / 2;
     e = 0.001;
-    color("Peru")
+    color(color_shim)
         hull()
             for (z = [side_z0, side_z1 - e]) {
                 t = band_in_x - width_at(z) / 2;
@@ -324,7 +348,7 @@ module shim_side(sx, sy) {
 
 // Carriage bolt: head inside the leg, nut in a counterbore in the outside of the 2x4
 module carriage_bolt(len) {
-    color("Silver") {
+    color(color_hardware) {
         cylinder(d = bolt_dia, h = len, $fn = 16);
         translate([0, 0, -0.2]) cylinder(d = bolt_dia * 2.2, h = 0.2, $fn = 24);
     }
@@ -333,7 +357,8 @@ module carriage_bolt(len) {
 module band_bolts() {
     zc = band_center_height;
     for (sx = [-1, 1], sy = [-1, 1]) {
-        // Through the front/back face of the leg
+        // Through the front/back face of the leg (only with the 2x4s)
+        if (show_2x4)
         translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (depth_at(zc) / 2 - leg_thickness), zc])
             rotate([sy > 0 ? -90 : 90, 0, 0])
                 carriage_bolt(band_in_y - depth_at(zc) / 2 + lumber_thickness - 0.05);
@@ -348,14 +373,14 @@ module band_bolts() {
 module wood_band() {
     band_boards();
     for (sx = [-1, 1], sy = [-1, 1]) {
-        shim_front(sx, sy);
+        if (show_2x4) shim_front(sx, sy);
         shim_side(sx, sy);
     }
     band_bolts();
 }
 
 // Cut list, printed in the OpenSCAD console
-echo(str("BAND: front/back 2x4 boards (2) = ", band_out_w, " in long"));
+if (show_2x4) echo(str("BAND: front/back 2x4 boards (2) = ", band_out_w, " in long"));
 echo(str("BAND: side 2x6 boards (2) = ", 2 * band_in_y, " in long, bottom edge ", side_z0, " in off the floor"));
 echo(str("BAND: outside size = ", band_out_w, " x ", band_out_d, " in"));
 echo(str("SHIMS front/back (4): ", shim_min, " in at bottom to ", shim_max_front, " in at top, ",
@@ -392,18 +417,37 @@ riser_length = caster_plate_length + 0.5;
 // Lower arm stops 1/4 in short of the upper arm's riser; upper arm can run to 1/4 in
 // short of the front of the band
 riser_near_y = pivot_y_high - caster_from_pivot - riser_length / 2;
-// When parked, both pedal ends swing up, so where the arms overlap the lower arm rises
-// toward the upper one. The gap closes at about this point along the side (with 3/4 in to spare):
-parked_clear_y = (pivot_y_high - pivot_y_low) / 2 + stack_gap / (2 * sin(park_angle)) - 0.75;
-arm_len_low = min(arm_length, arm_pivot_from_end + pivot_y_low + min(riser_near_y - 0.25, parked_clear_y));
+// The upper arm pushes the lower arm down through a pad on the lower arm. Halfway between
+// the two pivots both arms swing the same amount, so the gap between them never changes
+// there: that's the push point. The pad ends at the push point (on the lower-pivot side,
+// where the gap only opens up when parked), and the lower arm ends just past it.
+push_y = (pivot_y_high - pivot_y_low) / 2;
+push_u = pivot_y_low + push_y;              // push point, measured from the lower pivot
+push_pad_thickness = stack_gap - 0.0625;    // 1/16 in less than the gap, so it never binds
+arm_len_low = min(arm_length, arm_pivot_from_end + pivot_y_low + min(riser_near_y - 0.25, push_y + 0.1));
+
+// Lower arm angle: it rests on its own wheel, unless the upper arm has come down far enough
+// to press on its push pad; then it follows the upper arm. Solved numerically
+// (side view: y along the side, z up).
+function pad_gap(phi, th) =
+    let(p = [-pivot_y_low + push_u * cos(phi) - (arm_size / 2 + push_pad_thickness) * sin(phi),
+             pivot_z_low + push_u * sin(phi) + (arm_size / 2 + push_pad_thickness) * cos(phi)],
+        b = [pivot_y_high - (arm_size / 2) * sin(th), pivot_z_high - (arm_size / 2) * cos(th)],
+        n = [sin(th), cos(th)])
+    (b - p) * n;   // > 0 means the pad is below the upper arm
+function solve_low(th, lo = 0, hi = 60, i = 0) =
+    i > 40 ? lo :
+    let(mid = (lo + hi) / 2)
+    pad_gap(mid, th) > 0 ? solve_low(th, mid, hi, i + 1) : solve_low(th, lo, mid, i + 1);
+arm_angle_low = rolling ? 0 : min(park_angle, solve_low(arm_angle));
 arm_len_high = min(arm_length, arm_pivot_from_end + pivot_y_high + band_out_d / 2 - 0.25);
 
 // One arm in its own frame: pivot at origin, arm points +X, 2x6 toward -Y, arm toward +Y.
 // riser = height of the block under the arm at the caster (0 = caster screws to the arm)
-module arm_local(len, riser) {
+module arm_local(len, riser, ang) {
     band_back = -pivot_gap - lumber_thickness;   // inside face of the 2x6
     // Pivot bolt: head on the outside of the arm, washer and nut inside the 2x6
-    color("Silver") {
+    color(color_hardware) {
         translate([0, band_back - 0.45, 0]) rotate([-90, 0, 0])
             cylinder(d = pivot_bolt_dia, h = -band_back + 0.45 + arm_size, $fn = 16);
         translate([0, arm_size, 0]) rotate([-90, 0, 0])
@@ -414,13 +458,18 @@ module arm_local(len, riser) {
             cylinder(d = pivot_bolt_dia * 1.8, h = 0.33, $fn = 6);
     }
     // Swinging parts
-    rotate([0, -arm_angle, 0]) {
-        color("Tan")
+    rotate([0, -ang, 0]) {
+        color(color_oak_arm)
             translate([-arm_pivot_from_end, 0, -arm_size / 2]) cube([len, arm_size, arm_size]);
         if (riser > 0)
-            color("Peru")
+            color(color_riser)
                 translate([caster_from_pivot - riser_length / 2, 0, -arm_size / 2 - riser])
                     cube([riser_length, arm_size, riser]);
+        // Lower arm: push pad on top, ending at the push point
+        if (riser == 0)
+            color(color_push_pad)
+                translate([push_u - push_pad_length, 0, arm_size / 2])
+                    cube([push_pad_length, arm_size, push_pad_thickness]);
         translate([caster_from_pivot, arm_size / 2, -arm_size / 2 - riser]) caster();
     }
 }
@@ -429,7 +478,7 @@ module arm_local(len, riser) {
 module caster() {
     h = caster_height;
     r = caster_wheel_dia / 2;
-    color("Silver") {
+    color(color_hardware) {
         translate([-caster_plate_length / 2, -caster_plate_width / 2, -0.12])
             cube([caster_plate_length, caster_plate_width, 0.12]);
         translate([0, 0, -0.5]) cylinder(d = 1.75, h = 0.38, $fn = 24);
@@ -453,7 +502,7 @@ module side_arm(sx, low) {
         multmatrix([[0, sx, 0, 0],
                     [-sy, 0, 0, 0],
                     [0, 0, 1, 0]])
-            arm_local(len, low ? 0 : riser_height);
+            arm_local(len, low ? 0 : riser_height, low ? arm_angle_low : arm_angle);
 }
 
 module wheel_arms() {
@@ -466,7 +515,13 @@ module wheel_arms() {
 wheel_front_back = (pivot_y_low - caster_from_pivot) + (pivot_y_high - caster_from_pivot);
 wheel_side = band_out_w + 2 * (pivot_gap + arm_size / 2);
 echo(str("ARMS: lower arm = ", arm_len_low, " in, upper arm = ", arm_len_high, " in, riser = ",
-         riser_height, " in"));
+         riser_length, " x ", arm_size, " x ", riser_height, " in, push pad = ",
+         push_pad_length, " x ", arm_size, " x ", push_pad_thickness, " in"));
+echo(str("ARMS: parked, the push pad is ", pad_gap(park_angle, park_angle),
+         " in below the upper arm; the upper arm picks up the lower arm partway down"));
+echo(str("COLORS: 2x4 = ", color_2x4, ", 2x6 = ", color_2x6, ", oak arms = ", color_oak_arm,
+         ", risers = ", color_riser, ", shims = ", color_shim, ", push pads = ", color_push_pad,
+         ", hardware = ", color_hardware));
 echo(str("ARMS: pivots ", pivot_z_low, " and ", pivot_z_high, " in off the floor; ",
          band_out_d / 2 - pivot_y_low, " and ", band_out_d / 2 - pivot_y_high, " in in from the ends of the band"));
 echo(str("ARMS: pivot edge distance in the 2x6: lower ", pivot_z_low - side_z0, " in from bottom, upper ",
@@ -486,5 +541,83 @@ translate([0, 0, lift]) {
     if (show_saw) saw();
 }
 
+// ---------- Parts laid out on the floor ----------
+
+// Inches as a fraction to the nearest 1/16, e.g. 24 3/4"
+function gcd(a, b) = b == 0 ? a : gcd(b, a % b);
+function inch(x) =
+    let(t = round(x * 16), w = floor(t / 16), n = t - 16 * w, g = gcd(n, 16))
+    n == 0 ? str(w, "\"") :
+    w == 0 ? str(n / g, "/", 16 / g, "\"") :
+             str(w, " ", n / g, "/", 16 / g, "\"");
+
+module floor_label(txt, size = 0.7) {
+    color("Black") linear_extrude(0.02) text(txt, size = size, font = "Liberation Sans");
+}
+
+// Tapered shim lying flat: w wide, h long, t0 to t1 thick
+module shim_flat(w, h, t0, t1) {
+    e = 0.001;
+    hull() {
+        cube([w, e, t0]);
+        translate([0, h - e, 0]) cube([w, e, t1]);
+    }
+}
+
+// A row of identical parts, side by side in X, each one footprint [w, l] and height t
+module part_row(n, w, l, t, gap = 0.75) {
+    for (i = [0 : n - 1]) translate([i * (w + gap), 0, 0]) cube([w, l, t]);
+}
+
+layout_x = 20;   // parts start this far to the right of the saw's center
+layout_y = -14;  // front edge of the parts
+
+module parts_layout() {
+    y0 = layout_y;
+    side_len = 2 * band_in_y;
+    // 2x6 side boards
+    x1 = layout_x;
+    translate([x1, y0, 0]) color(color_2x6) part_row(2, side_lumber_width, side_len, lumber_thickness);
+    translate([x1, y0 - 1.2, 0]) floor_label(str("2x6 side x2, ", inch(side_len)));
+    // Upper arms
+    x2 = x1 + 2 * side_lumber_width + 3;
+    translate([x2, y0, 0]) color(color_oak_arm) part_row(4, arm_size, arm_len_high, arm_size);
+    translate([x2, y0 - 1.2, 0]) floor_label(str("Upper arm x4, ", inch(arm_len_high)));
+    // Lower arms, risers, push pads
+    x3 = x2 + 4 * (arm_size + 0.75) + 2.5;
+    translate([x3, y0, 0]) color(color_oak_arm) part_row(4, arm_size, arm_len_low, arm_size);
+    translate([x3, y0 - 1.2, 0]) floor_label(str("Lower arm x4, ", inch(arm_len_low)));
+    ry = y0 + arm_len_low + 3;
+    translate([x3, ry, 0]) color(color_riser) part_row(4, arm_size, riser_length, riser_height);
+    translate([x3, ry - 1.2, 0]) floor_label(str("Riser x4, ", inch(riser_length), " x ", inch(arm_size),
+                                                 " x ", inch(riser_height)), 0.55);
+    py = ry + riser_length + 3;
+    translate([x3, py, 0]) color(color_push_pad) part_row(4, arm_size, push_pad_length, push_pad_thickness);
+    translate([x3, py - 1.2, 0]) floor_label(str("Push pad x4, ", inch(push_pad_length), " x ", inch(arm_size),
+                                                 " x ", inch(push_pad_thickness)), 0.55);
+    // Side shims
+    x4 = x3 + 4 * (arm_size + 0.75) + 2.5;
+    sw = flange_at(band_center_height);
+    for (i = [0 : 3]) translate([x4 + i * (sw + 0.75), y0, 0])
+        color(color_shim) shim_flat(sw, side_lumber_width, shim_min, shim_max_side);
+    translate([x4, y0 - 1.2, 0]) floor_label(str("Side shim x4, ", inch(sw), " x ", inch(side_lumber_width)), 0.55);
+    translate([x4, y0 - 2.2, 0]) floor_label(str("taper ", inch(shim_min), " to ", inch(shim_max_side),
+                                                 ", about ", round(lean_side * 2) / 2, "°"), 0.55);
+    // Optional 2x4s and their shims
+    if (show_2x4) {
+        x5 = x4 + 4 * (sw + 0.75) + 2.5;
+        translate([x5, y0, 0]) color(color_2x4) part_row(2, lumber_width, band_out_w, lumber_thickness);
+        translate([x5, y0 - 1.2, 0]) floor_label(str("2x4 front/back x2, ", inch(band_out_w)), 0.55);
+        fy = y0 + band_out_w + 3;
+        for (i = [0 : 3]) translate([x5 + i * (sw + 0.75), fy, 0])
+            color(color_shim) shim_flat(sw, lumber_width, shim_min, shim_max_front);
+        translate([x5, fy - 1.2, 0]) floor_label(str("Front/back shim x4, ", inch(sw), " x ", inch(lumber_width)), 0.55);
+        translate([x5, fy - 2.2, 0]) floor_label(str("taper ", inch(shim_min), " to ", inch(shim_max_front),
+                                                     ", about ", round(lean_front * 2) / 2, "°"), 0.55);
+    }
+}
+
+if (show_parts_layout) parts_layout();
+
 // Floor reference
-color("LightGray", 0.3) translate([-25, -20, -0.02]) cube([50, 40, 0.02]);
+color("LightGray", 0.3) translate([-25, -20, -0.02]) cube([show_parts_layout ? 115 : 50, 40, 0.02]);
