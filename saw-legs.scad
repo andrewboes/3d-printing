@@ -56,8 +56,12 @@ show_band = true;
 band_center_height = 4.5;
 // Lumber thickness (2x4 actual size)
 lumber_thickness = 1.5;
-// Lumber width, standing on edge (2x4 actual size)
+// Lumber width, standing on edge: front and back boards (2x4 actual size)
 lumber_width = 3.5;
+// Long side boards are 2x6, so both stacked arms have wood to pivot in (2x6 actual size)
+side_lumber_width = 5.5;
+// Bottom of the 2x6 side boards off the floor; puts the existing square hole near the bottom edge
+side_bottom = 3.25;
 // Thinnest point of each shim, at the bottom of the band
 shim_min = 0.125;
 // Carriage bolt diameter
@@ -66,39 +70,36 @@ bolt_dia = 0.375;
 bolt_offset = 0;
 // true = square holes on both sides of each leg, false = front/back sides only (GUESS)
 bolts_both_faces = true;
+// The carriage bolt nuts sit in a counterbore in the outside of the 2x4, so nothing sticks out
+band_nut_recess_depth = 0.5;
+band_nut_recess_dia = 1;
 
 /* [Wheel arms] */
+// v2: two crossing arms on the outside of each long (left/right) side, like the photo.
+// Both arms sit flat against the 2x6 (washers only, no spacer). The front-pivot arm runs
+// low; the back-pivot arm runs above it and crosses over it, and its wheel hangs down on
+// a riser block glued under the arm.
 show_arms = true;
-// Checked = arms on the outside of the band (wheels near the corners), unchecked = inside
-arms_outside = true;
 // Unchecked = parked (saw on its feet). Checked = rolling (pedals down, saw lifted)
 rolling = false;
-// Which arms to show (more coming later)
-show_front_arm = true;
-show_right_arm = true;
-// Which way the pinwheel turns, seen from above
-pinwheel_counterclockwise = true;
-// Longest the arms can be; each arm is shortened automatically to clear its neighbor
+// Arm cross-section, square oak (MEASURED: exactly 2x2)
+arm_size = 2;
+// Longest the arms can be; the lower arm is shortened automatically to clear the upper arm's riser
 arm_length = 20;
-// Arm cross-section (hardwood)
-arm_thickness = 1.5;
-arm_height = 3.5;
 // Pivot bolt distance from the corner end of the arm
-arm_pivot_from_end = 1.75;
+arm_pivot_from_end = 1.25;
 // Pivot bolt diameter
 pivot_bolt_dia = 0.375;
 // Wheel (caster) center distance from the pivot bolt
-caster_from_pivot = 3;
+caster_from_pivot = 2;
 // How far the wheels lift the saw
 lift_height = 0.5;
 // Wheel clearance off the floor when parked
 park_clearance = 0.25;
-// Pivot block: hardwood block glued and screwed to the band at each pivot, so the pivot
-// bolt has solid wood around it above the top of the band
-pivot_block_thickness = 0.75;
-pivot_block_length = 4;
-// Gap (washers) between pivot block and arm
+// Washer gap between the 2x6 and the arms
 pivot_gap = 0.125;
+// Vertical gap between the lower and upper arm (when rolling)
+stack_gap = 0.25;
 
 /* [Casters] */
 // Floor to top of mounting plate (MEASURED)
@@ -244,20 +245,22 @@ module saw() {
 
 band_z0 = band_center_height - lumber_width / 2;   // bottom of the 2x4s
 band_z1 = band_center_height + lumber_width / 2;   // top of the 2x4s
+side_z0 = side_bottom;                             // bottom of the 2x6 side boards
+side_z1 = side_bottom + side_lumber_width;         // top of the 2x6 side boards
 
 // Width of each side of the L at height z
 function flange_at(z) = leg_flange_bottom + (leg_flange_top - leg_flange_bottom) * z / leg_height;
 
 // Inside faces of the band (distance from center). The legs lean in going up, so the
 // band touches the shim's thin end at the bottom and the shims thicken toward the top.
-band_in_x = width_at(band_z0) / 2 + shim_min;
+band_in_x = width_at(side_z0) / 2 + shim_min;
 band_in_y = depth_at(band_z0) / 2 + shim_min;
 band_out_w = 2 * (band_in_x + lumber_thickness);
 band_out_d = 2 * (band_in_y + lumber_thickness);
 
 // Shim thickness at the top of the band
 shim_max_front = band_in_y - depth_at(band_z1) / 2;
-shim_max_side = band_in_x - width_at(band_z1) / 2;
+shim_max_side = band_in_x - width_at(side_z1) / 2;
 
 // Lean angle of the legs
 lean_front = atan((corner_depth - top_depth) / 2 / leg_height);
@@ -267,13 +270,27 @@ function bolt_pos() = bolt_offset > 0 ? bolt_offset : flange_at(band_center_heig
 
 // Front and back boards run the full outside width; side boards fit between them
 module band_boards() {
-    color("BurlyWood") {
-        for (sy = [-1, 1])
-            translate([-band_out_w / 2, sy > 0 ? band_in_y : -band_in_y - lumber_thickness, band_z0])
-                cube([band_out_w, lumber_thickness, lumber_width]);
-        for (sx = [-1, 1])
-            translate([sx > 0 ? band_in_x : -band_in_x - lumber_thickness, -band_in_y, band_z0])
-                cube([lumber_thickness, 2 * band_in_y, lumber_width]);
+    zc = band_center_height;
+    r = band_nut_recess_depth;
+    color("BurlyWood") difference() {
+        union() {
+            for (sy = [-1, 1])
+                translate([-band_out_w / 2, sy > 0 ? band_in_y : -band_in_y - lumber_thickness, band_z0])
+                    cube([band_out_w, lumber_thickness, lumber_width]);
+            for (sx = [-1, 1])
+                translate([sx > 0 ? band_in_x : -band_in_x - lumber_thickness, -band_in_y, side_z0])
+                    cube([lumber_thickness, 2 * band_in_y, side_lumber_width]);
+        }
+        // Nut counterbores on the outside face
+        for (sx = [-1, 1], sy = [-1, 1]) {
+            translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (band_out_d / 2 + 0.01), zc])
+                rotate([sy > 0 ? 90 : -90, 0, 0])
+                    cylinder(d = band_nut_recess_dia, h = r + 0.01, $fn = 24);
+            if (bolts_both_faces)
+                translate([sx * (band_out_w / 2 + 0.01), sy * (depth_at(zc) / 2 - bolt_pos()), zc])
+                    rotate([0, sx > 0 ? -90 : 90, 0])
+                        cylinder(d = band_nut_recess_dia, h = r + 0.01, $fn = 24);
+        }
     }
 }
 
@@ -298,14 +315,14 @@ module shim_side(sx, sy) {
     e = 0.001;
     color("Peru")
         hull()
-            for (z = [band_z0, band_z1 - e]) {
+            for (z = [side_z0, side_z1 - e]) {
                 t = band_in_x - width_at(z) / 2;
                 translate([sx > 0 ? width_at(z) / 2 : -band_in_x, min(yc, yc - sy * w), z])
                     cube([t, w, e]);
             }
 }
 
-// Carriage bolt: head inside the leg, nut outside the 2x4
+// Carriage bolt: head inside the leg, nut in a counterbore in the outside of the 2x4
 module carriage_bolt(len) {
     color("Silver") {
         cylinder(d = bolt_dia, h = len, $fn = 16);
@@ -319,12 +336,12 @@ module band_bolts() {
         // Through the front/back face of the leg
         translate([sx * (width_at(zc) / 2 - bolt_pos()), sy * (depth_at(zc) / 2 - leg_thickness), zc])
             rotate([sy > 0 ? -90 : 90, 0, 0])
-                carriage_bolt(band_in_y - depth_at(zc) / 2 + lumber_thickness + 0.6);
+                carriage_bolt(band_in_y - depth_at(zc) / 2 + lumber_thickness - 0.05);
         // Through the side face of the leg
         if (bolts_both_faces)
             translate([sx * (width_at(zc) / 2 - leg_thickness), sy * (depth_at(zc) / 2 - bolt_pos()), zc])
                 rotate([0, sx > 0 ? 90 : -90, 0])
-                    carriage_bolt(band_in_x - width_at(zc) / 2 + lumber_thickness + 0.6);
+                    carriage_bolt(band_in_x - width_at(zc) / 2 + lumber_thickness - 0.05);
     }
 }
 
@@ -338,17 +355,16 @@ module wood_band() {
 }
 
 // Cut list, printed in the OpenSCAD console
-echo(str("BAND: front/back boards (2) = ", band_out_w, " in long"));
-echo(str("BAND: side boards (2) = ", 2 * band_in_y, " in long"));
+echo(str("BAND: front/back 2x4 boards (2) = ", band_out_w, " in long"));
+echo(str("BAND: side 2x6 boards (2) = ", 2 * band_in_y, " in long, bottom edge ", side_z0, " in off the floor"));
 echo(str("BAND: outside size = ", band_out_w, " x ", band_out_d, " in"));
 echo(str("SHIMS front/back (4): ", shim_min, " in at bottom to ", shim_max_front, " in at top, ",
          flange_at(band_center_height), " in wide, lean ", lean_front, " deg"));
 echo(str("SHIMS sides (4): ", shim_min, " in at bottom to ", shim_max_side, " in at top, ",
-         flange_at(band_center_height), " in wide, lean ", lean_side, " deg"));
+         flange_at(band_center_height), " in wide x ", side_lumber_width, " in tall, lean ", lean_side, " deg"));
 
-// ---------- Wheel arms ----------
-// Pinwheel layout: one arm on the inside of each side of the band. Each arm's pivot
-// and wheel are near one corner; the pedal end points toward the next corner.
+
+// ---------- Wheel arms (v2) ----------
 
 lift = rolling ? lift_height : 0;
 
@@ -356,77 +372,56 @@ lift = rolling ? lift_height : 0;
 park_angle = asin((lift_height + park_clearance) / caster_from_pivot);
 arm_angle = rolling ? 0 : park_angle;
 
-// Pivot height in the saw's frame (saw on its feet). When rolling the arm is level
-// and the caster plate sits at caster_height.
-pivot_z = caster_height + arm_height / 2 - lift_height;
+// Pivot heights with the saw on its feet. When rolling, both arms are level: the lower
+// arm's caster plate sits at caster_height, and the upper arm sits one arm + stack_gap
+// higher with a riser block making up the difference.
+riser_height = arm_size + stack_gap;
+pivot_z_low = caster_height + arm_size / 2 - lift_height;
+pivot_z_high = pivot_z_low + riser_height;
 
-// Distance from the band's inside face to the arm's band-side face
-arm_standoff = pivot_block_thickness + pivot_gap;
+// Pivot just inside the leg: the bolt goes through the 2x6 past the leg's flange, so the
+// washer and nut on the inside are easy to reach. Checked 1/2 in above the pivot (washer
+// edge), where the leaning legs reach farthest.
+nut_clearance = 0.625;
+function pivot_y_at(z) = depth_at(z + 0.5) / 2 - flange_at(z + 0.5) - nut_clearance;
+pivot_y_low = pivot_y_at(pivot_z_low);     // front pivot (lower arm)
+pivot_y_high = pivot_y_at(pivot_z_high);   // back pivot (upper arm)
 
-// Pivot block: its corner-side end sits 1/8 in past the leg flange; the pivot is 1 1/4 in
-// from that end and 1 1/4 in below the block's top
-block_pivot_edge = 1.25;
-block_top_z = pivot_z + block_pivot_edge;
+// Upper arm's riser runs 1/4 in past the caster plate each way
+riser_length = caster_plate_length + 0.5;
+// Lower arm stops 1/4 in short of the upper arm's riser; upper arm can run to 1/4 in
+// short of the front of the band
+riser_near_y = pivot_y_high - caster_from_pivot - riser_length / 2;
+// When parked, both pedal ends swing up, so where the arms overlap the lower arm rises
+// toward the upper one. The gap closes at about this point along the side (with 3/4 in to spare):
+parked_clear_y = (pivot_y_high - pivot_y_low) / 2 + stack_gap / (2 * sin(park_angle)) - 0.75;
+arm_len_low = min(arm_length, arm_pivot_from_end + pivot_y_low + min(riser_near_y - 0.25, parked_clear_y));
+arm_len_high = min(arm_length, arm_pivot_from_end + pivot_y_high + band_out_d / 2 - 0.25);
 
-// Where the leg's flange ends along each side of the band, checked at the top of the
-// pivot block (the legs lean in and widen going up, so that's where they reach farthest)
-flange_end_x = width_at(block_top_z) / 2 - flange_at(block_top_z);   // along front/back boards
-flange_end_y = depth_at(block_top_z) / 2 - flange_at(block_top_z);   // along side boards
-
-// Inside: far end of each arm stops 1/4 in short of the next arm's inside face
-far_limit_front = band_in_x - arm_standoff - caster_plate_width - 0.25;
-far_limit_side = band_in_y - arm_standoff - caster_plate_width - 0.25;
-
-// Pivot position along each side (distance from the center of the saw), and arm lengths.
-// Inside: the pivot block has to start past the leg.
-// Outside: the pivot bolt goes through the band just past the leg, so its nut and washer
-// on the inside of the band clear the leg and are easy to reach.
-nut_clearance = 0.625;   // washer radius plus 1/8 in
-pivot_along_front = arms_outside ? flange_end_x - nut_clearance
-                                 : flange_end_x - 0.125 - block_pivot_edge;
-pivot_along_side = arms_outside ? flange_end_y - nut_clearance
-                                : flange_end_y - 0.125 - block_pivot_edge;
-arm_len_front = min(arm_length, pivot_along_front + arm_pivot_from_end
-                                + (arms_outside ? band_out_w / 2 - 0.25 : far_limit_front));
-arm_len_side = min(arm_length, pivot_along_side + arm_pivot_from_end
-                               + (arms_outside ? band_out_d / 2 - 0.25 : far_limit_side));
-
-// Band face the arms mount to (distance from the center of the saw)
-face_front = arms_outside ? band_out_d / 2 : band_in_y;
-face_side = arms_outside ? band_out_w / 2 : band_in_x;
-// +1 = arm sits toward the saw's center from the band, -1 = arm sits outside the band
-arm_dir = arms_outside ? -1 : 1;
-
-// One arm in its own frame: pivot at origin, arm points +X, band is toward -Y.
-// The caster pad is glued to the far face of the arm so the plate clears the pivot block.
-module arm_local(len) {
-    u0 = -arm_pivot_from_end;
-    // Pivot block (fixed to the band, does not swing)
-    color("SaddleBrown")
-        translate([-block_pivot_edge, -arm_standoff, band_z0 - pivot_z])
-            cube([pivot_block_length, pivot_block_thickness, block_top_z - band_z0]);
-    // Pivot bolt: head on the arm, runs through the block and the band,
-    // washer and nut on the other side of the band
-    back = -arm_standoff - lumber_thickness;   // far face of the band
+// One arm in its own frame: pivot at origin, arm points +X, 2x6 toward -Y, arm toward +Y.
+// riser = height of the block under the arm at the caster (0 = caster screws to the arm)
+module arm_local(len, riser) {
+    band_back = -pivot_gap - lumber_thickness;   // inside face of the 2x6
+    // Pivot bolt: head on the outside of the arm, washer and nut inside the 2x6
     color("Silver") {
-        translate([0, back - 0.45, 0]) rotate([-90, 0, 0])
-            cylinder(d = pivot_bolt_dia, h = -back + 0.45 + arm_thickness, $fn = 16);
-        translate([0, arm_thickness, 0]) rotate([-90, 0, 0])
-            cylinder(d = pivot_bolt_dia * 1.8, h = 0.25, $fn = 6);           // head
-        translate([0, back - 0.08, 0]) rotate([-90, 0, 0])
-            cylinder(d = 1, h = 0.08, $fn = 24);                             // washer
-        translate([0, back - 0.41, 0]) rotate([-90, 0, 0])
-            cylinder(d = pivot_bolt_dia * 1.8, h = 0.33, $fn = 6);           // nut
+        translate([0, band_back - 0.45, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia, h = -band_back + 0.45 + arm_size, $fn = 16);
+        translate([0, arm_size, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia * 1.8, h = 0.25, $fn = 6);
+        translate([0, band_back - 0.08, 0]) rotate([-90, 0, 0])
+            cylinder(d = 1, h = 0.08, $fn = 24);
+        translate([0, band_back - 0.41, 0]) rotate([-90, 0, 0])
+            cylinder(d = pivot_bolt_dia * 1.8, h = 0.33, $fn = 6);
     }
     // Swinging parts
     rotate([0, -arm_angle, 0]) {
         color("Tan")
-            translate([u0, 0, -arm_height / 2]) cube([len, arm_thickness, arm_height]);
-        // Caster pad
-        color("Tan")
-            translate([caster_from_pivot - caster_plate_length / 2 - 0.25, arm_thickness, -arm_height / 2])
-                cube([caster_plate_length + 0.5, caster_plate_width - arm_thickness, 1.5]);
-        translate([caster_from_pivot, caster_plate_width / 2, -arm_height / 2]) caster();
+            translate([-arm_pivot_from_end, 0, -arm_size / 2]) cube([len, arm_size, arm_size]);
+        if (riser > 0)
+            color("Peru")
+                translate([caster_from_pivot - riser_length / 2, 0, -arm_size / 2 - riser])
+                    cube([riser_length, arm_size, riser]);
+        translate([caster_from_pivot, arm_size / 2, -arm_size / 2 - riser]) caster();
     }
 }
 
@@ -438,7 +433,6 @@ module caster() {
         translate([-caster_plate_length / 2, -caster_plate_width / 2, -0.12])
             cube([caster_plate_length, caster_plate_width, 0.12]);
         translate([0, 0, -0.5]) cylinder(d = 1.75, h = 0.38, $fn = 24);
-        // Fork
         for (s = [-1, 1])
             translate([-0.6, s * (caster_wheel_width / 2 + 0.06) - 0.05, -(h - r)])
                 cube([1.2, 0.1, h - r - 0.5]);
@@ -448,38 +442,40 @@ module caster() {
             cylinder(r = r, h = caster_wheel_width, center = true, $fn = 32);
 }
 
-// Place an arm on side k (0 = front, 1 = right, 2 = back, 3 = left)
-module place_arm(k) {
-    d = pinwheel_counterclockwise ? 1 : -1;
-    front_back = (k % 2 == 0);
-    face = front_back ? face_front : face_side;
-    along = front_back ? pivot_along_front : pivot_along_side;
-    len = front_back ? arm_len_front : arm_len_side;
-    // Sides: counterclockwise turns front -> right -> back -> left.
-    // Outside arms are mirrored so the band is on their inner side.
-    rotate([0, 0, d * k * 90])
-        translate([-d * along, -face + arm_dir * arm_standoff, pivot_z])
-            scale([d, arm_dir, 1]) arm_local(len);
+// One arm on side sx (+1 right, -1 left). low = the lower arm, which pivots at the front.
+module side_arm(sx, low) {
+    sy = low ? -1 : 1;   // which end the pivot is at
+    py = low ? pivot_y_low : pivot_y_high;
+    pz = low ? pivot_z_low : pivot_z_high;
+    len = low ? arm_len_low : arm_len_high;
+    // Local X (along the arm) points toward the other end; local Y points away from the 2x6
+    translate([sx * (band_out_w / 2 + pivot_gap), sy * py, pz])
+        multmatrix([[0, sx, 0, 0],
+                    [-sy, 0, 0, 0],
+                    [0, 0, 1, 0]])
+            arm_local(len, low ? 0 : riser_height);
 }
 
 module wheel_arms() {
-    if (show_front_arm) place_arm(0);
-    if (show_right_arm) place_arm(pinwheel_counterclockwise ? 1 : 3);
+    for (sx = [-1, 1]) {
+        side_arm(sx, true);
+        side_arm(sx, false);
+    }
 }
 
-// Wheel positions (rolling), for stance check. Front wheel, then right/left side wheel.
-wf = [-pivot_along_front + caster_from_pivot, -face_front + arm_dir * (arm_standoff + caster_plate_width / 2)];
-ws0 = [-pivot_along_side + caster_from_pivot, -face_side + arm_dir * (arm_standoff + caster_plate_width / 2)];
-ws = [-ws0[1], ws0[0]];   // rotate 90 degrees onto the right side
-function edge_dist(a, b) = abs(a[0] * b[1] - b[0] * a[1]) / norm(b - a);
-stance = 2 * min(edge_dist(wf, ws), edge_dist(ws, -wf));
-pedal_rise = (arm_len_side - arm_pivot_from_end) * sin(park_angle);
+wheel_front_back = (pivot_y_low - caster_from_pivot) + (pivot_y_high - caster_from_pivot);
+wheel_side = band_out_w + 2 * (pivot_gap + arm_size / 2);
+echo(str("ARMS: lower arm = ", arm_len_low, " in, upper arm = ", arm_len_high, " in, riser = ",
+         riser_height, " in"));
+echo(str("ARMS: pivots ", pivot_z_low, " and ", pivot_z_high, " in off the floor; ",
+         band_out_d / 2 - pivot_y_low, " and ", band_out_d / 2 - pivot_y_high, " in in from the ends of the band"));
+echo(str("ARMS: pivot edge distance in the 2x6: lower ", pivot_z_low - side_z0, " in from bottom, upper ",
+         side_z1 - pivot_z_high, " in from top"));
+echo(str("ARMS: leverage lower = ", (arm_len_low - arm_pivot_from_end) / caster_from_pivot,
+         ":1, upper = ", (arm_len_high - arm_pivot_from_end) / caster_from_pivot, ":1"));
+echo(str("STANCE: wheels front-to-back = ", wheel_front_back, " in; side-to-side = ", wheel_side, " in"));
+echo(str("STANCE: on its feet = ", floor_depth, " x ", floor_width, " in"));
 
-echo(str("ARMS: front/back arms = ", arm_len_front, " in long, side arms = ", arm_len_side, " in long"));
-echo(str("ARMS: parked angle = ", park_angle, " deg, pedal end rises ", pedal_rise, " in (side arm)"));
-echo(str("ARMS: pedal leverage front = ", (arm_len_front - arm_pivot_from_end) / caster_from_pivot,
-         ":1, side = ", (arm_len_side - arm_pivot_from_end) / caster_from_pivot, ":1"));
-echo(str("STANCE: narrowest width on wheels = ", stance, " in (on its feet: ", min(floor_width, floor_depth), " in)"));
 
 // ---------- Assembly ----------
 
